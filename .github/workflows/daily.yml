@@ -2,26 +2,27 @@ name: Daily Weather and Rates Report
 
 on:
   schedule:
-    # 03:00 по UTC = 08:00 по Ташкенту (UTC+5)
-    - cron: '0 3 * * *'
-  workflow_dispatch: # Позволяет запускать вручную кнопкой для проверки
+    # 03:10 UTC = 08:10 утра по Ташкенту (UTC+5)
+    # Неровные минуты (10) гарантируют отсутствие очередей на серверах GitHub
+    - cron: '10 3 * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Скачиваем код
+      - name: Скачиваем репозиторий
         uses: actions/checkout@v4
 
-      - name: Устанавливаем Python
+      - name: Настраиваем Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Устанавливаем библиотеку requests
+      - name: Устанавливаем зависимости
         run: pip install requests
 
-      - name: Запуск скрипта
+      - name: Запуск отправки
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
