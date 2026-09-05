@@ -1,7 +1,7 @@
+from datetime import datetime
 import os
 import requests
 
-# Токены берутся из защищенных настроек GitHub (или запасные значения)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8810079431:AAHe077hsXsje5o4m-adQnvwFnWs4r03hjA")
 CHAT_ID = os.getenv("CHAT_ID", "1406906655")
 
@@ -12,29 +12,38 @@ def get_cbu_rates():
     try:
         response = requests.get(url, timeout=10)
         data = response.json()
+
         rates = {}
+        rate_date = ""
+
+        # Берем только самые первые (свежие) записи по каждой валюте
         for item in data:
             code = item.get("Ccy")
-            if code in ["USD", "KRW", "RUB"]:
+            if code in ["USD", "KRW", "RUB"] and code not in rates:
                 rates[code] = {
                     "rate": item.get("Rate"),
                     "diff": item.get("Diff"),
                 }
-        return rates
+                if not rate_date:
+                    rate_date = item.get("Date", "")
+
+        return rates, rate_date
     except Exception as e:
         print(f"Ошибка при получении курсов валют: {e}")
-        return None
+        return None, ""
 
 
 def get_tashkent_weather():
-    """Получаем погоду в Ташкенте через Open-Meteo"""
+    """Получаем текущую погоду и прогноз в Ташкенте через Open-Meteo"""
     url = "https://api.open-meteo.com/v1/forecast?latitude=41.2995&longitude=69.2401&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=Asia/Tashkent"
     try:
         response = requests.get(url, timeout=10)
         data = response.json()
+
         current_temp = round(data["current_weather"]["temperature"])
         temp_max = round(data["daily"]["temperature_2m_max"][0])
         temp_min = round(data["daily"]["temperature_2m_min"][0])
+
         return {"current": current_temp, "max": temp_max, "min": temp_min}
     except Exception as e:
         print(f"Ошибка при получении погоды: {e}")
@@ -42,10 +51,29 @@ def get_tashkent_weather():
 
 
 def send_daily_report():
-    rates = get_cbu_rates()
+    rates, rate_date = get_cbu_rates()
     weather = get_tashkent_weather()
 
-    # Погода
+    # Сегодняшняя дата по Ташкенту
+    months = [
+        "",
+        "января",
+        "февраля",
+        "марта",
+        "апреля",
+        "мая",
+        "июня",
+        "июля",
+        "августа",
+        "сентября",
+        "октября",
+        "ноября",
+        "декабря",
+    ]
+    now = datetime.now()
+    today_str = f"{now.day} {months[now.month]}"
+
+    # Блок погоды
     if weather:
         weather_text = (
             f"☀️ <b>Погода в Ташкенте:</b>\n"
@@ -53,9 +81,9 @@ def send_daily_report():
             f"• Сегодня: от <b>{weather['min']}°C</b> до <b>{weather['max']}°C</b>\n"
         )
     else:
-        weather_text = "☀️ <b>Погода:</b> Не удалось получить данные\n"
+        weather_text = "☀️ <b>Погода:</b> Данные временно недоступны\n"
 
-    # Курсы валют
+    # Блок курсов ЦБ РУз
     if rates:
 
         def format_diff(diff):
@@ -65,30 +93,39 @@ def send_daily_report():
 
         usd_rate = rates.get("USD", {}).get("rate", "N/A")
         usd_diff = rates.get("USD", {}).get("diff", "0")
+
         krw_rate = rates.get("KRW", {}).get("rate", "N/A")
         krw_diff = rates.get("KRW", {}).get("diff", "0")
+
         rub_rate = rates.get("RUB", {}).get("rate", "N/A")
         rub_diff = rates.get("RUB", {}).get("diff", "0")
 
+        date_note = f" (курс на {rate_date})" if rate_date else ""
+
         rates_text = (
-            f"🏦 <b>Курсы валют ЦБ РУз:</b>\n"
+            f"🏦 <b>Курсы валют ЦБ РУз{date_note}:</b>\n"
             f"🇺🇸 1 USD = <b>{usd_rate}</b> сум{format_diff(usd_diff)}\n"
             f"🇰🇷 1 KRW = <b>{krw_rate}</b> сум{format_diff(krw_diff)}\n"
             f"🇷🇺 1 RUB = <b>{rub_rate}</b> сум{format_diff(rub_diff)}\n"
         )
     else:
-        rates_text = "🏦 <b>Курсы валют:</b> Не удалось получить данные\n"
+        rates_text = "🏦 <b>Курсы валют:</b> Данные временно недоступны\n"
 
-    full_message = f"📊 <b>Ежедневный отчет</b>\n\n{weather_text}\n{rates_text}"
+    full_message = (
+        f"📊 <b>Сводка на {today_str}</b>\n\n{weather_text}\n{rates_text}"
+    )
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": full_message, "parse_mode": "HTML"}
 
-    res = requests.post(url, data=payload, timeout=10)
-    if res.status_code == 200:
-        print("Отчет успешно отправлен в Telegram!")
-    else:
-        print(f"Ошибка отправки: {res.status_code}, {res.text}")
+    try:
+        res = requests.post(url, data=payload, timeout=10)
+        if res.status_code == 200:
+            print("Отчет успешно доставлен!")
+        else:
+            print(f"Ошибка отправки: {res.status_code}, {res.text}")
+    except Exception as e:
+        print(f"Ошибка сети: {e}")
 
 
 if __name__ == "__main__":
