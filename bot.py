@@ -3,11 +3,10 @@ import os
 import requests
 from zoneinfo import ZoneInfo
 
-# Токены берутся из секретов GitHub (или значения по умолчанию)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8810079431:AAHe077hsXsje5o4m-adQnvwFnWs4r03hjA")
 CHAT_ID = os.getenv("CHAT_ID", "1406906655")
 
-# Словарь кодов погоды WMO (Open-Meteo)
+# Коды погоды Open-Meteo
 WMO_CODES = {
     0: "ясно ☀️",
     1: "преимущественно ясно 🌤",
@@ -32,48 +31,13 @@ WMO_CODES = {
     99: "сильная гроза с градом ⛈",
 }
 
-# Редкие и удивительные факты (по одному на каждый день)
-RARE_FACTS = [
-    "Ленивцы задерживают дыхание под водой до 40 минут — дольше, чем дельфины!",
-    "Пчелы-стражники выгоняют пьяных от забродившего нектара пчел и не пускают их в улей.",
-    "В открытом космосе два чистых куска одинакового металла мгновенно свариваются в один кусок (холодная сварка).",
-    "Обычное белое облако средних размеров весит около 500 тонн (как 100 слонов).",
-    "Желудок человека вырабатывает новый слой слизи каждые 3 дня, чтобы не переварить самого себя.",
-    "Роговица глаза — единственная ткань человека, получающая кислород прямо из воздуха, а не через кровь.",
-    "В 1807 году Наполеон со свитой позорно сбежал от стаи домашних кроликов, бросившихся к нему за едой.",
-    "Вороны не просто оплакивают умершего сородича, а проводят расследование причин его гибели.",
-    "Оксфордский университет старше цивилизации ацтеков более чем на 300 лет.",
-    "Самый громкий звук в истории (извержение вулкана Кракатау) обогнул Землю 4 раза.",
-    "Сердце синего кита размером с небольшой автомобиль и бьется со скоростью всего 5–8 ударов в минуту.",
-    "Бабочки чувствуют вкус еды с помощью рецепторов на своих лапках.",
-    "Коалы спят до 22 часов в сутки из-за того, что листья эвкалипта практически не дают энергии.",
-    "На Венере сутки длятся дольше, чем её полный год (оборот вокруг Солнца).",
-    "У осьминога три сердца, синяя кровь и девять мозговых центров.",
-    "Медуза Turritopsis dohrnii биологически бессмертна: она умеет омолаживать свои клетки до стадии личинки.",
-    "ДНК человека и банана совпадает более чем на 50%.",
-    "Эйфелева башня летом становится выше примерно на 15 см из-за теплового расширения металла.",
-    "У белых медведей черная кожа и бесцветная прозрачная шерсть, которая лишь кажется белой.",
-    "Мед — единственный продукт на планете, который никогда не портится при правильном хранении.",
-    "Шотландия выбрала своим национальным животным единорога.",
-    "Зубы улитки — самый прочный природный биоматериал в мире, они прочнее титана.",
-    "Тигры имеют полосатую кожу, а не только мех — узор полос у каждого уникален, как отпечатки пальцев.",
-    "Каждую секунду на Солнце сгорает около 4 миллионов тонн вещества.",
-    "Отпечаток носа у каждой собаки уникален так же, как отпечатки пальцев у человека.",
-    "В теле взрослого человека бактерий примерно столько же, сколько собственных клеток.",
-    "На вершине Эвереста вода закипает уже при 68°C из-за низкого давления.",
-    "Пингвины делают предложение своей избраннице, даря ей самый гладкий камешек.",
-    "Фламинго могут пить кипящую воду из гейзеров и фильтровать соль через ноздри.",
-    "Шоколад когда-то использовался в качестве официальной валюты у майя.",
-    "Деревья в лесу умеют общаться и делиться питательными веществами через подземную грибную сеть.",
-]
-
 
 def describe_wmo(code):
     return WMO_CODES.get(code, "облачно ⛅")
 
 
 def analyze_period(hours_indices, hourly_data):
-    """Анализирует температуру и погоду за определенный интервал часов"""
+    """Анализ температуры и погоды по временным промежуткам"""
     temps = [hourly_data["temperature_2m"][i] for i in hours_indices]
     codes = [hourly_data["weather_code"][i] for i in hours_indices]
     precips = [
@@ -84,7 +48,6 @@ def analyze_period(hours_indices, hourly_data):
     min_t, max_t = round(min(temps)), round(max(temps))
     temp_str = f"+{min_t}°C" if min_t == max_t else f"+{min_t}°...+{max_t}°C"
 
-    # Проверяем, есть ли дождь или гроза в этот период
     rain_codes = [
         c
         for c in codes
@@ -97,18 +60,18 @@ def analyze_period(hours_indices, hourly_data):
         if max_precip > 20:
             w_desc += f" (вероятность {max_precip}%)"
     else:
-        most_common_code = max(set(codes), key=codes.count)
-        w_desc = describe_wmo(most_common_code)
+        most_common = max(set(codes), key=codes.count)
+        w_desc = describe_wmo(most_common)
 
     return temp_str, w_desc
 
 
 def get_tashkent_weather():
-    """Получаем детальный почасовой прогноз погоды в Ташкенте через Open-Meteo"""
+    """Получение реальной погоды на текущую минуту и прогноза на день"""
     url = (
         "https://api.open-meteo.com/v1/forecast?"
         "latitude=41.2995&longitude=69.2401&"
-        "current_weather=true&"
+        "current=temperature_2m,weather_code&"
         "hourly=temperature_2m,weather_code,precipitation_probability&"
         "daily=temperature_2m_max,temperature_2m_min&"
         "timezone=Asia/Tashkent&forecast_days=1"
@@ -117,19 +80,17 @@ def get_tashkent_weather():
         response = requests.get(url, timeout=12)
         data = response.json()
 
-        current_temp = round(data["current_weather"]["temperature"])
-        current_code = data["current_weather"].get("weathercode", 0)
+        # Текущая температура и состояние погоды
+        current_temp = round(data["current"]["temperature_2m"])
+        current_code = data["current"].get("weather_code", 0)
         current_status = describe_wmo(current_code)
 
         temp_max = round(data["daily"]["temperature_2m_max"][0])
         temp_min = round(data["daily"]["temperature_2m_min"][0])
 
         hourly = data["hourly"]
-        # Утро: 06:00 - 11:00
         morning_t, morning_desc = analyze_period(range(6, 12), hourly)
-        # День: 12:00 - 17:00
         day_t, day_desc = analyze_period(range(12, 18), hourly)
-        # Вечер: 18:00 - 23:00
         evening_t, evening_desc = analyze_period(range(18, 24), hourly)
 
         return {
@@ -147,7 +108,7 @@ def get_tashkent_weather():
 
 
 def get_cbu_rates():
-    """Получаем официальные курсы валют ЦБ РУз"""
+    """Официальные курсы валют ЦБ РУз"""
     url = "https://cbu.uz/ru/arkhiv-kursov-valyut/json/"
     try:
         response = requests.get(url, timeout=10)
@@ -191,26 +152,27 @@ def send_daily_report():
         "ноября",
         "декабря",
     ]
-    weekdays = [
-        "Понедельник",
-        "Вторник",
-        "Среда",
-        "Четверг",
-        "Пятница",
-        "Суббота",
-        "Воскресенье",
+    weekdays_genitive = [
+        "понедельник",
+        "вторник",
+        "среду",
+        "четверг",
+        "пятницу",
+        "субботу",
+        "воскресенье",
     ]
 
-    day_str = f"{weekdays[now.weekday()]}, {now.day} {months[now.month]}"
+    day_str = f"{weekdays_genitive[now.weekday()]}, {now.day} {months[now.month]}"
+    current_time_str = now.strftime("%H:%M")
 
     weather = get_tashkent_weather()
     rates, rate_date = get_cbu_rates()
 
-    # 1. Погода с деталями по времени дня
+    # Блок погоды
     if weather:
         weather_text = (
             f"☀️ <b>Погода в Ташкенте:</b>\n"
-            f"• Сейчас (06:00): <b>{weather['current']}°C</b> ({weather['status']})\n"
+            f"• Сейчас ({current_time_str}): <b>{weather['current']}°C</b> ({weather['status']})\n"
             f"• За сутки: от <b>{weather['min']}°C</b> до <b>+{weather['max']}°C</b>\n\n"
             f"🕒 <b>Прогноз по часам на сегодня:</b>\n"
             f"🌅 <b>Утро (до 11:00):</b> {weather['morning']}\n"
@@ -220,7 +182,7 @@ def send_daily_report():
     else:
         weather_text = "☀️ <b>Погода:</b> Данные временно недоступны\n"
 
-    # 2. Курсы валют
+    # Блок курсов валют
     if rates:
 
         def format_diff(diff):
@@ -242,18 +204,8 @@ def send_daily_report():
     else:
         rates_text = "🏦 <b>Курсы валют:</b> Данные временно недоступны\n"
 
-    # 3. Факт дня
-    fact_index = (now.timetuple().tm_yday) % len(RARE_FACTS)
-    today_fact = RARE_FACTS[fact_index]
-    fact_text = f"🧠 <b>Факт дня:</b>\n<i>{today_fact}</i>"
-
-    # Итоговое сообщение
-    full_message = (
-        f"📊 <b>Сводка на {day_str}</b>\n\n"
-        f"{weather_text}\n"
-        f"{rates_text}\n"
-        f"{fact_text}"
-    )
+    # Итоговое сообщение без фактов
+    full_message = f"📊 <b>Сводка на {day_str}</b>\n\n{weather_text}\n{rates_text}"
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": full_message, "parse_mode": "HTML"}
