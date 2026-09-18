@@ -3,13 +3,12 @@ name: Daily Weather and Rates Report
 on:
   schedule:
     # 00:55 UTC = 05:55 утра по Ташкенту (UTC+5)
-    # Срабатывает без задержек и очередей ровно к 06:00 утра
     - cron: '55 0 * * *'
   workflow_dispatch:
 
 jobs:
   run-bot:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Скачиваем репозиторий
         uses: actions/checkout@v4
@@ -17,10 +16,10 @@ jobs:
       - name: Настраиваем Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Устанавливаем зависимости
-        run: pip install requests
+        run: pip install --no-cache-dir requests
 
       - name: Запуск скрипта
         env:
