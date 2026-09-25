@@ -3,10 +3,11 @@ import os
 import requests
 from zoneinfo import ZoneInfo
 
+# Подтягиваем секреты или используем встроенные
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8810079431:AAHe077hsXsje5o4m-adQnvwFnWs4r03hjA")
 CHAT_ID = os.getenv("CHAT_ID", "1406906655")
 
-# Коды погоды Open-Meteo
+# Описание кодов погоды Open-Meteo
 WMO_CODES = {
     0: "ясно ☀️",
     1: "преимущественно ясно 🌤",
@@ -37,7 +38,7 @@ def describe_wmo(code):
 
 
 def analyze_period(hours_indices, hourly_data):
-    """Анализ температуры и погоды по временным промежуткам"""
+    """Анализирует часть дня и возвращает температуру и погоду"""
     temps = [hourly_data["temperature_2m"][i] for i in hours_indices]
     codes = [hourly_data["weather_code"][i] for i in hours_indices]
     precips = [
@@ -48,6 +49,7 @@ def analyze_period(hours_indices, hourly_data):
     min_t, max_t = round(min(temps)), round(max(temps))
     temp_str = f"+{min_t}°C" if min_t == max_t else f"+{min_t}°...+{max_t}°C"
 
+    # Проверка на осадки
     rain_codes = [
         c
         for c in codes
@@ -67,7 +69,7 @@ def analyze_period(hours_indices, hourly_data):
 
 
 def get_tashkent_weather():
-    """Получение реальной погоды на текущую минуту и прогноза на день"""
+    """Получает текущую реальную температуру и почасовой расклад"""
     url = (
         "https://api.open-meteo.com/v1/forecast?"
         "latitude=41.2995&longitude=69.2401&"
@@ -80,7 +82,6 @@ def get_tashkent_weather():
         response = requests.get(url, timeout=12)
         data = response.json()
 
-        # Текущая температура и состояние погоды
         current_temp = round(data["current"]["temperature_2m"])
         current_code = data["current"].get("weather_code", 0)
         current_status = describe_wmo(current_code)
@@ -108,7 +109,7 @@ def get_tashkent_weather():
 
 
 def get_cbu_rates():
-    """Официальные курсы валют ЦБ РУз"""
+    """Получает свежие курсы валют ЦБ РУз"""
     url = "https://cbu.uz/ru/arkhiv-kursov-valyut/json/"
     try:
         response = requests.get(url, timeout=10)
@@ -168,7 +169,7 @@ def send_daily_report():
     weather = get_tashkent_weather()
     rates, rate_date = get_cbu_rates()
 
-    # Блок погоды
+    # Погода
     if weather:
         weather_text = (
             f"☀️ <b>Погода в Ташкенте:</b>\n"
@@ -182,7 +183,7 @@ def send_daily_report():
     else:
         weather_text = "☀️ <b>Погода:</b> Данные временно недоступны\n"
 
-    # Блок курсов валют
+    # Курсы валют
     if rates:
 
         def format_diff(diff):
@@ -204,7 +205,6 @@ def send_daily_report():
     else:
         rates_text = "🏦 <b>Курсы валют:</b> Данные временно недоступны\n"
 
-    # Итоговое сообщение без фактов
     full_message = f"📊 <b>Сводка на {day_str}</b>\n\n{weather_text}\n{rates_text}"
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
