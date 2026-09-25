@@ -2,8 +2,8 @@ name: Daily Weather and Rates Report
 
 on:
   schedule:
-    # 00:55 UTC = 05:55 утра по Ташкенту (UTC+5)
-    - cron: '55 0 * * *'
+    # 21:15 UTC с учетом очереди GitHub запускает бота в 06:45–07:15 утра по Ташкенту
+    - cron: '15 21 * * *'
   workflow_dispatch:
 
 jobs:
