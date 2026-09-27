@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import requests
 from zoneinfo import ZoneInfo
+from deep_translator import GoogleTranslator
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8810079431:AAHe077hsXsje5o4m-adQnvwFnWs4r03hjA")
 CHAT_ID = os.getenv("CHAT_ID", "1406906655")
@@ -96,14 +97,12 @@ def get_tashkent_weather():
         return None
 
 def get_air_quality():
-    """Получаем индекс качества воздуха (US AQI) как на IQAir"""
     url = "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=41.2995&longitude=69.2401&current=us_aqi&timezone=Asia/Tashkent"
     try:
         response = requests.get(url, timeout=10)
         data = response.json()
         aqi = data["current"]["us_aqi"]
         
-        # Классификация IQAir
         if aqi <= 50:
             status = "🟢 Хорошо"
         elif aqi <= 100:
@@ -130,7 +129,6 @@ def get_cbu_rates():
         rates = {}
         rate_date = ""
 
-        # Добавили CNY (Юань)
         for item in data:
             code = item.get("Ccy")
             if code in ["USD", "KRW", "RUB", "CNY"] and code not in rates:
@@ -146,6 +144,25 @@ def get_cbu_rates():
         print(f"Ошибка валют: {e}")
         return None, ""
 
+def get_random_fact():
+    """Получает случайный факт из API и переводит его на русский"""
+    url = "https://uselessfacts.jsph.pl/api/v2/facts/random?language=en"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            fact_en = data.get("text", "")
+            
+            if fact_en:
+                # Надежный переводчик (вместо проблемного googletrans)
+                fact_ru = GoogleTranslator(source='en', target='ru').translate(fact_en)
+                return fact_ru
+    except Exception as e:
+        print(f"Ошибка при получении факта: {e}")
+    
+    # Запасной факт на случай, если API временно недоступен
+    return "Космонавты не могут плакать в космосе: из-за невесомости слезы не текут вниз, а собираются в шарики вокруг глаз."
+
 def send_daily_report():
     tashkent_tz = ZoneInfo("Asia/Tashkent")
     now = datetime.now(tashkent_tz)
@@ -159,6 +176,7 @@ def send_daily_report():
     weather = get_tashkent_weather()
     air_quality = get_air_quality()
     rates, rate_date = get_cbu_rates()
+    random_fact = get_random_fact()
 
     if weather:
         weather_text = (
@@ -196,8 +214,13 @@ def send_daily_report():
     else:
         rates_text = "🏦 <b>Курсы валют:</b> Данные временно недоступны\n"
 
-    # Факты полностью убраны, формируем чистое сообщение
-    full_message = f"📊 <b>Сводка на {day_str}</b>\n\n{weather_text}\n{rates_text}"
+    # Формируем итоговое сообщение
+    full_message = (
+        f"📊 <b>Сводка на {day_str}</b>\n\n"
+        f"{weather_text}\n"
+        f"{rates_text}\n"
+        f"💡 <b>Интересный факт:</b>\n<i>{random_fact}</i>"
+    )
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": full_message, "parse_mode": "HTML"}
