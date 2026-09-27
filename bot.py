@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import requests
+import random
 from zoneinfo import ZoneInfo
 from deep_translator import GoogleTranslator
 
@@ -145,23 +146,39 @@ def get_cbu_rates():
         return None, ""
 
 def get_random_fact():
-    """Получает случайный факт из API и переводит его на русский"""
-    url = "https://uselessfacts.jsph.pl/api/v2/facts/random?language=en"
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            fact_en = data.get("text", "")
-            
-            if fact_en:
-                # Надежный переводчик (вместо проблемного googletrans)
-                fact_ru = GoogleTranslator(source='en', target='ru').translate(fact_en)
-                return fact_ru
-    except Exception as e:
-        print(f"Ошибка при получении факта: {e}")
+    """Маскируемся под браузер и пробуем 2 разных API"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+    }
     
-    # Запасной факт на случай, если API временно недоступен
-    return "Космонавты не могут плакать в космосе: из-за невесомости слезы не текут вниз, а собираются в шарики вокруг глаз."
+    # Попытка №1: Основное API
+    try:
+        res = requests.get("https://uselessfacts.jsph.pl/api/v2/facts/random?language=en", headers=headers, timeout=8)
+        if res.status_code == 200:
+            fact_en = res.json().get("text", "")
+            return GoogleTranslator(source='en', target='ru').translate(fact_en)
+    except Exception as e:
+        print(f"API 1 упал: {e}")
+        
+    # Попытка №2: Запасное API (Popcat)
+    try:
+        res2 = requests.get("https://api.popcat.xyz/fact", headers=headers, timeout=8)
+        if res2.status_code == 200:
+            fact_en2 = res2.json().get("fact", "")
+            return GoogleTranslator(source='en', target='ru').translate(fact_en2)
+    except Exception as e:
+        print(f"API 2 упал: {e}")
+
+    # Попытка №3: Случайный факт из базы (если интернет отрубило полностью)
+    backup_facts = [
+        "Космонавты не могут плакать в космосе: из-за невесомости слезы собираются в шарики вокруг глаз.",
+        "Ленивцы могут задерживать дыхание под водой до 40 минут — это дольше, чем дельфины!",
+        "В космосе два чистых куска металла мгновенно прилипают друг к другу намертво (холодная сварка).",
+        "Мед — единственный продукт на планете, который никогда не портится.",
+        "У осьминога три сердца, синяя кровь и девять мозговых центров.",
+        "Роговица глаза — единственная ткань человека, получающая кислород прямо из воздуха."
+    ]
+    return random.choice(backup_facts)
 
 def send_daily_report():
     tashkent_tz = ZoneInfo("Asia/Tashkent")
@@ -214,7 +231,6 @@ def send_daily_report():
     else:
         rates_text = "🏦 <b>Курсы валют:</b> Данные временно недоступны\n"
 
-    # Формируем итоговое сообщение
     full_message = (
         f"📊 <b>Сводка на {day_str}</b>\n\n"
         f"{weather_text}\n"
