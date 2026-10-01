@@ -2,7 +2,7 @@ name: Daily Weather and Rates Report
 
 on:
   schedule:
-    # 22:45 UTC = 03:45 по Ташкенту (с учетом очереди придет около 06:45-07:15)
+    # 22:45 UTC (03:45 по Ташкенту, придет утром)
     - cron: '45 22 * * *'
   workflow_dispatch:
 
@@ -19,8 +19,7 @@ jobs:
           python-version: '3.12'
 
       - name: Устанавливаем зависимости
-        # ДОБАВЛЕН deep-translator ДЛЯ ПЕРЕВОДА ФАКТОВ
-        run: pip install --no-cache-dir requests deep-translator
+        run: pip install --no-cache-dir requests
 
       - name: Запуск скрипта
         env:
