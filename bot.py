@@ -1,5 +1,4 @@
 import os
-import time
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -8,8 +7,8 @@ from zoneinfo import ZoneInfo
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8810079431:AAHe077hsXsje5o4m-adQnvwFnWs4r03hjA")
 CHAT_ID = os.getenv("CHAT_ID", "1406906655")
+APINEX_API_KEY = os.getenv("APINEX_API_KEY", "")
 
-# Настраиваем авто-повторы (если сайты ЦБ или погоды временно зависли)
 session = requests.Session()
 retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
 session.mount('https://', HTTPAdapter(max_retries=retries))
@@ -52,23 +51,19 @@ def get_tashkent_weather():
     try:
         response = session.get(url, timeout=15)
         data = response.json()
-        current_temp = round(data["current"]["temperature_2m"])
-        current_code = data["current"].get("weather_code", 0)
-        temp_max = round(data["daily"]["temperature_2m_max"][0])
-        temp_min = round(data["daily"]["temperature_2m_min"][0])
-        hourly = data["hourly"]
         
-        m_t, m_desc = analyze_period(range(6, 12), hourly)
-        d_t, d_desc = analyze_period(range(12, 18), hourly)
-        e_t, e_desc = analyze_period(range(18, 24), hourly)
+        m_t, m_desc = analyze_period(range(6, 12), data["hourly"])
+        d_t, d_desc = analyze_period(range(12, 18), data["hourly"])
+        e_t, e_desc = analyze_period(range(18, 24), data["hourly"])
 
         return {
-            "current": current_temp, "status": describe_wmo(current_code),
-            "max": temp_max, "min": temp_min,
+            "current": round(data["current"]["temperature_2m"]), 
+            "status": describe_wmo(data["current"].get("weather_code", 0)),
+            "max": round(data["daily"]["temperature_2m_max"][0]), 
+            "min": round(data["daily"]["temperature_2m_min"][0]),
             "morning": f"{m_t}, {m_desc}", "day": f"{d_t}, {d_desc}", "evening": f"{e_t}, {e_desc}"
         }
-    except Exception as e:
-        print(f"Ошибка погоды: {e}")
+    except:
         return None
 
 def get_air_quality():
@@ -80,8 +75,7 @@ def get_air_quality():
         elif aqi <= 100: status = "🟡 Средне"
         elif aqi <= 150: status = "🟠 Вредно для уязвимых"
         elif aqi <= 200: status = "🔴 Вредно"
-        elif aqi <= 300: status = "🟣 Очень вредно"
-        else: status = "🟤 Опасно"
+        else: status = "🟣 Очень вредно"
         return f"{aqi} AQI ({status})"
     except:
         return "Данные недоступны"
@@ -98,48 +92,47 @@ def get_cbu_rates():
                 rates[code] = {"rate": item.get("Rate"), "diff": item.get("Diff")}
                 if not rate_date: rate_date = item.get("Date", "")
         return rates, rate_date
-    except Exception as e:
-        print(f"Ошибка валют: {e}")
+    except:
         return None, ""
 
-def get_random_fact():
-    """Берет случайный факт из интернета и переводит его через Google API"""
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    fact_en = ""
+def get_ai_message(weather_status, aqi_status):
+    if not APINEX_API_KEY:
+        return "🧠 Подключите API-ключ нейросети (APINEX_API_KEY), чтобы увидеть здесь уникальный текст!"
     
-    # Попытка 1: UselessFacts API
+    api_url = "https://api.apinex.bond/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {APINEX_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    prompt = (
+        f"Сегодня в Ташкенте погода: {weather_status}, качество воздуха: {aqi_status}. "
+        "Напиши один очень интересный, малоизвестный факт (из науки, истории, природы или космоса) "
+        "и добавь одно короткое пожелание на день, учитывая текущую погоду и воздух. "
+        "Текст должен быть коротким, легким для чтения, с 1-2 эмодзи. "
+        "Не используй приветствия вроде 'Привет' или 'Вот факт'."
+    )
+    
+    payload = {
+        "model": "free/glm-5.3",
+        "messages": [
+            {"role": "system", "content": "Ты крутой ассистент, который пишет утренние сводки."},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 250,
+        "temperature": 0.7
+    }
+    
     try:
-        res = session.get("https://uselessfacts.jsph.pl/api/v2/facts/random", headers=headers, timeout=10)
-        fact_en = res.json().get("text", "")
-    except:
-        pass
-
-    # Попытка 2 (если первый сайт упал): Nekos API
-    if not fact_en:
-        try:
-            res = session.get("https://nekos.life/api/v2/fact", headers=headers, timeout=10)
-            fact_en = res.json().get("fact", "")
-        except:
-            return "Сегодня факты взяли выходной, но завтра обязательно вернутся! 🧠"
-
-    # Перевод текста на русский язык через скрытый API Google Translate
-    try:
-        translate_url = "https://translate.googleapis.com/translate_a/single"
-        params = {
-            "client": "gtx",
-            "sl": "en",
-            "tl": "ru",
-            "dt": "t",
-            "q": fact_en
-        }
-        res_tr = session.get(translate_url, params=params, timeout=10)
-        data = res_tr.json()
-        # Собираем переведенные предложения
-        fact_ru = "".join([sentence[0] for sentence in data[0]])
-        return fact_ru
+        res = session.post(api_url, headers=headers, json=payload, timeout=25)
+        if res.status_code == 200:
+            return res.json()["choices"][0]["message"]["content"].strip()
+        else:
+            print(f"Ошибка нейросети: {res.text}")
+            return "Сегодня нейросеть отдыхает, но завтра обязательно расскажет что-то интересное! ✨"
     except Exception as e:
-        print(f"Ошибка перевода: {e}")
-        return fact_en # Если гугл отвалился, отправим на английском
+        print(f"Сбой соединения с AI: {e}")
+        return "Нейросеть сейчас недоступна 🤖"
 
 def send_daily_report():
     tz = ZoneInfo("Asia/Tashkent")
@@ -152,7 +145,11 @@ def send_daily_report():
     weather = get_tashkent_weather()
     air = get_air_quality()
     rates, r_date = get_cbu_rates()
-    random_fact = get_random_fact()
+
+    weather_info = f"{weather['current']}°C, {weather['status']}" if weather else "неизвестно"
+    
+    # Запрос к нейросети GLM-5.3
+    ai_text = get_ai_message(weather_info, air)
 
     if weather:
         w_text = (f"☀️ <b>Погода в Ташкенте:</b>\n• Сейчас ({now.strftime('%H:%M')}): <b>{weather['current']}°C</b> ({weather['status']})\n"
@@ -176,7 +173,7 @@ def send_daily_report():
     else:
         r_text = "🏦 <b>Курсы валют:</b> Данные временно недоступны\n"
 
-    full_message = f"📊 <b>Сводка на {day_str}</b>\n\n{w_text}\n{r_text}\n💡 <b>Интересный факт:</b>\n<i>{random_fact}</i>"
+    full_message = f"📊 <b>Сводка на {day_str}</b>\n\n{w_text}\n{r_text}\n💡 <b>От нейросети:</b>\n<i>{ai_text}</i>"
 
     try:
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", 
