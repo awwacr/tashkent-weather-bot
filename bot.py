@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8810079431:AAHe077hsXsje5o4m-adQnvwFnWs4r03hjA")
 CHAT_ID = os.getenv("CHAT_ID", "1406906655")
 
-# Усиленная маскировка под реальный браузер (Google Chrome) и авто-повторы
 session = requests.Session()
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -16,17 +15,16 @@ headers = {
 }
 session.headers.update(headers)
 
-# Если сайт ЦБ РУз или фактов зависает, бот будет пытаться подключиться 5 раз подряд!
-retries = Retry(total=5, backoff_factor=2, status_forcelist=[403, 429, 500, 502, 503, 504])
+retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
 session.mount('https://', HTTPAdapter(max_retries=retries))
 
 WMO_CODES = {
     0: "ясно ☀️", 1: "преимущественно ясно 🌤", 2: "переменная облачность ⛅", 3: "пасмурно ☁️",
     45: "туман 🌫", 48: "густой туман 🌫", 51: "небольшая морось 🌦", 53: "морось 🌧",
     55: "плотная морось 🌧", 61: "небольшой дождь 🌦", 63: "дождь 🌧", 65: "сильный ливень 🌧🌧",
-    71: "неболь снег 🌨", 73: "снег 🌨", 75: "сильный снегопад ❄️", 80: "ливень 🌧",
+    71: "небольшой снег 🌨", 73: "снег 🌨", 75: "сильный снегопад ❄️", 80: "ливень 🌧",
     81: "сильный ливень 🌧", 82: "шквальный ливень ⛈", 95: "гроза ⛈", 96: "гроза с градом ⛈",
-    99: "сильная гроза ⛈",
+    99: "сильная гроза с градом ⛈",
 }
 
 def describe_wmo(code):
@@ -56,7 +54,7 @@ def analyze_period(hours_indices, hourly_data):
 def get_tashkent_weather():
     url = "https://api.open-meteo.com/v1/forecast?latitude=41.2995&longitude=69.2401&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min&timezone=Asia/Tashkent&forecast_days=1"
     try:
-        response = session.get(url, timeout=20)
+        response = session.get(url, timeout=15)
         data = response.json()
         
         m_t, m_desc = analyze_period(range(6, 12), data["hourly"])
@@ -70,14 +68,13 @@ def get_tashkent_weather():
             "min": round(data["daily"]["temperature_2m_min"][0]),
             "morning": f"{m_t}, {m_desc}", "day": f"{d_t}, {d_desc}", "evening": f"{e_t}, {e_desc}"
         }
-    except Exception as e:
-        print(f"Ошибка погоды: {e}")
+    except:
         return None
 
 def get_air_quality():
     url = "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=41.2995&longitude=69.2401&current=us_aqi&timezone=Asia/Tashkent"
     try:
-        response = session.get(url, timeout=20)
+        response = session.get(url, timeout=15)
         aqi = response.json()["current"]["us_aqi"]
         if aqi <= 50: status = "🟢 Хорошо"
         elif aqi <= 100: status = "🟡 Средне"
@@ -89,57 +86,86 @@ def get_air_quality():
         return "Данные недоступны"
 
 def get_cbu_rates():
-    url = "https://cbu.uz/ru/arkhiv-kursov-valyut/json/"
+    """Безотказный сбор курсов с тройным резервом"""
+    # 1. Попытка напрямую с сайта ЦБ РУз
     try:
-        # Увеличили таймаут, так как ЦБ РУз иногда долго "думает" по утрам
-        response = session.get(url, timeout=30)
-        data = response.json()
-        rates, rate_date = {}, ""
-        for item in data:
-            code = item.get("Ccy")
-            if code in ["USD", "KRW", "RUB", "CNY"] and code not in rates:
-                rates[code] = {"rate": item.get("Rate"), "diff": item.get("Diff")}
-                if not rate_date: rate_date = item.get("Date", "")
-        return rates, rate_date
+        url = "https://cbu.uz/ru/arkhiv-kursov-valyut/json/"
+        res = session.get(url, timeout=7)
+        if res.status_code == 200:
+            data = res.json()
+            rates, rate_date = {}, ""
+            for item in data:
+                code = item.get("Ccy")
+                if code in ["USD", "KRW", "RUB", "CNY"] and code not in rates:
+                    rates[code] = {"rate": item.get("Rate"), "diff": item.get("Diff")}
+                    if not rate_date:
+                        rate_date = item.get("Date", "")
+            if rates:
+                return rates, f"ЦБ РУз (на {rate_date})"
     except Exception as e:
-        print(f"Ошибка получения курсов валют: {e}")
-        return None, ""
+        print(f"Прямой сайт ЦБ недоступен: {e}")
+
+    # 2. Попытка через открытое зеркало данных ЦБ
+    try:
+        url_mirror = "https://allratestoday.com/api/open/central-bank/cbu"
+        res = session.get(url_mirror, timeout=7)
+        if res.status_code == 200:
+            data = res.json()
+            rate_date = data.get("rate_date", "")
+            rates = {}
+            for item in data.get("rates", []):
+                code = item.get("base")
+                if code in ["USD", "KRW", "RUB", "CNY"]:
+                    rates[code] = {"rate": f"{float(item.get('value', 0)):.2f}", "diff": ""}
+            if rates:
+                return rates, f"ЦБ РУз (на {rate_date})"
+    except Exception as e:
+        print(f"Зеркало ЦБ недоступно: {e}")
+
+    # 3. Безотказный международный шлюз (всегда доступен на серверах)
+    try:
+        url_global = "https://open.er-api.com/v6/latest/USD"
+        res = session.get(url_global, timeout=7)
+        if res.status_code == 200:
+            data = res.json()
+            r = data.get("rates", {})
+            uzs = r.get("UZS", 0)
+            if uzs > 0:
+                rates = {
+                    "USD": {"rate": f"{uzs:.2f}", "diff": ""},
+                    "CNY": {"rate": f"{(uzs / r.get('CNY', 1)):.2f}", "diff": ""},
+                    "KRW": {"rate": f"{(uzs / r.get('KRW', 1)):.2f}", "diff": ""},
+                    "RUB": {"rate": f"{(uzs / r.get('RUB', 1)):.2f}", "diff": ""},
+                }
+                return rates, "рыночные котировки"
+    except Exception as e:
+        print(f"Глобальный шлюз недоступен: {e}")
+
+    return None, ""
 
 def get_random_fact():
-    """Берет случайный факт из интернета и переводит его через Google API"""
+    """Случайный факт из онлайн-базы с переводом на русский"""
     fact_en = ""
-    
-    # Попытка 1: UselessFacts API
     try:
-        res = session.get("https://uselessfacts.jsph.pl/api/v2/facts/random", timeout=15)
+        res = session.get("https://uselessfacts.jsph.pl/api/v2/facts/random", timeout=10)
         fact_en = res.json().get("text", "")
     except:
         pass
 
-    # Попытка 2 (если первый сайт упал): Nekos API
     if not fact_en:
         try:
-            res = session.get("https://nekos.life/api/v2/fact", timeout=15)
+            res = session.get("https://nekos.life/api/v2/fact", timeout=10)
             fact_en = res.json().get("fact", "")
         except:
-            return "Сегодня факты взяли выходной, но завтра обязательно вернутся! 🧠"
+            return "Космонавты в невесомости не могут плакать привычным образом: слезы собираются в водяные шарики вокруг глаз."
 
-    # Перевод текста на русский язык через скрытый API Google Translate
     try:
         translate_url = "https://translate.googleapis.com/translate_a/single"
-        params = {
-            "client": "gtx",
-            "sl": "en",
-            "tl": "ru",
-            "dt": "t",
-            "q": fact_en
-        }
-        res_tr = session.get(translate_url, params=params, timeout=15)
+        params = {"client": "gtx", "sl": "en", "tl": "ru", "dt": "t", "q": fact_en}
+        res_tr = session.get(translate_url, params=params, timeout=10)
         data = res_tr.json()
-        fact_ru = "".join([sentence[0] for sentence in data[0]])
-        return fact_ru
-    except Exception as e:
-        print(f"Ошибка перевода: {e}")
+        return "".join([sentence[0] for sentence in data[0]])
+    except:
         return fact_en
 
 def send_daily_report():
@@ -152,7 +178,7 @@ def send_daily_report():
     
     weather = get_tashkent_weather()
     air = get_air_quality()
-    rates, r_date = get_cbu_rates()
+    rates, source_info = get_cbu_rates()
     random_fact = get_random_fact()
 
     if weather:
@@ -169,7 +195,7 @@ def send_daily_report():
     if rates:
         def fmt(d): return f" ({'+' if not str(d).startswith('-') else ''}{d})" if d and d != "0" else ""
         usd, cny, krw, rub = rates.get("USD",{}), rates.get("CNY",{}), rates.get("KRW",{}), rates.get("RUB",{})
-        r_text = (f"🏦 <b>Курсы валют ЦБ РУз (на {r_date}):</b>\n"
+        r_text = (f"🏦 <b>Курсы валют ({source_info}):</b>\n"
                   f"🇺🇸 1 USD = <b>{usd.get('rate','N/A')}</b> сум{fmt(usd.get('diff'))}\n"
                   f"🇨🇳 1 CNY = <b>{cny.get('rate','N/A')}</b> сум{fmt(cny.get('diff'))}\n"
                   f"🇰🇷 1 KRW = <b>{krw.get('rate','N/A')}</b> сум{fmt(krw.get('diff'))}\n"
