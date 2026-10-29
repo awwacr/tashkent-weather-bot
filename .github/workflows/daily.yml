@@ -2,7 +2,6 @@ name: Daily Weather and Rates Report
 
 on:
   schedule:
-    # Оставляем старое проверенное время, чтобы приходило утром!
     - cron: '45 22 * * *'
   workflow_dispatch:
 
@@ -25,5 +24,4 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-          APINEX_API_KEY: ${{ secrets.APINEX_API_KEY }}
         run: python bot.py
