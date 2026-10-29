@@ -86,11 +86,14 @@ def get_air_quality():
         return "Данные недоступны"
 
 def get_cbu_rates():
-    """Безотказный сбор курсов с тройным резервом"""
-    # 1. Попытка напрямую с сайта ЦБ РУз
+    """Свежие курсы: сначала ЦБ РУз (с проверкой на свежесть), затем мировой шлюз"""
+    tz = ZoneInfo("Asia/Tashkent")
+    now = datetime.now(tz)
+    
+    # 1. Запрос к сайту ЦБ РУз
     try:
         url = "https://cbu.uz/ru/arkhiv-kursov-valyut/json/"
-        res = session.get(url, timeout=7)
+        res = session.get(url, timeout=10)
         if res.status_code == 200:
             data = res.json()
             rates, rate_date = {}, ""
@@ -100,32 +103,23 @@ def get_cbu_rates():
                     rates[code] = {"rate": item.get("Rate"), "diff": item.get("Diff")}
                     if not rate_date:
                         rate_date = item.get("Date", "")
-            if rates:
-                return rates, f"ЦБ РУз (на {rate_date})"
+            
+            # Проверяем, что ЦБ прислал свежую дату (не старее 3 дней с учетом выходных)
+            if rates and rate_date:
+                try:
+                    d_obj = datetime.strptime(rate_date, "%d.%m.%Y")
+                    diff_days = (now.date() - d_obj.date()).days
+                    if diff_days <= 3:
+                        return rates, f"ЦБ РУз (на {rate_date})"
+                except:
+                    return rates, f"ЦБ РУз (на {rate_date})"
     except Exception as e:
-        print(f"Прямой сайт ЦБ недоступен: {e}")
+        print(f"ЦБ напрямую недоступен: {e}")
 
-    # 2. Попытка через открытое зеркало данных ЦБ
-    try:
-        url_mirror = "https://allratestoday.com/api/open/central-bank/cbu"
-        res = session.get(url_mirror, timeout=7)
-        if res.status_code == 200:
-            data = res.json()
-            rate_date = data.get("rate_date", "")
-            rates = {}
-            for item in data.get("rates", []):
-                code = item.get("base")
-                if code in ["USD", "KRW", "RUB", "CNY"]:
-                    rates[code] = {"rate": f"{float(item.get('value', 0)):.2f}", "diff": ""}
-            if rates:
-                return rates, f"ЦБ РУз (на {rate_date})"
-    except Exception as e:
-        print(f"Зеркало ЦБ недоступно: {e}")
-
-    # 3. Безотказный международный шлюз (всегда доступен на серверах)
+    # 2. Безотказный мировой шлюз с ежедневным обновлением
     try:
         url_global = "https://open.er-api.com/v6/latest/USD"
-        res = session.get(url_global, timeout=7)
+        res = session.get(url_global, timeout=10)
         if res.status_code == 200:
             data = res.json()
             r = data.get("rates", {})
@@ -137,9 +131,10 @@ def get_cbu_rates():
                     "KRW": {"rate": f"{(uzs / r.get('KRW', 1)):.2f}", "diff": ""},
                     "RUB": {"rate": f"{(uzs / r.get('RUB', 1)):.2f}", "diff": ""},
                 }
-                return rates, "рыночные котировки"
+                date_str = now.strftime("%d.%m.%Y")
+                return rates, f"на сегодня, {date_str}"
     except Exception as e:
-        print(f"Глобальный шлюз недоступен: {e}")
+        print(f"Глобальный шлюз валют недоступен: {e}")
 
     return None, ""
 
@@ -157,7 +152,7 @@ def get_random_fact():
             res = session.get("https://nekos.life/api/v2/fact", timeout=10)
             fact_en = res.json().get("fact", "")
         except:
-            return "Космонавты в невесомости не могут плакать привычным образом: слезы собираются в водяные шарики вокруг глаз."
+            return "Космонавты в невесомости не могут плакать: слезы не стекают, а собираются в водяные шарики вокруг глаз."
 
     try:
         translate_url = "https://translate.googleapis.com/translate_a/single"
