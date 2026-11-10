@@ -10,12 +10,13 @@ CHAT_ID = os.getenv("CHAT_ID", "1406906655")
 
 session = requests.Session()
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "X-Requested-With": "XMLHttpRequest"
 }
 session.headers.update(headers)
 
-retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+retries = Retry(total=4, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
 session.mount('https://', HTTPAdapter(max_retries=retries))
 
 WMO_CODES = {
@@ -86,60 +87,40 @@ def get_air_quality():
         return "Данные недоступны"
 
 def get_cbu_rates():
-    """Свежие курсы: сначала ЦБ РУз (с проверкой на свежесть), затем мировой шлюз"""
-    tz = ZoneInfo("Asia/Tashkent")
-    now = datetime.now(tz)
+    """Берёт официальные курсы ЦБ РУз прямо из официального JSON-шлюза cbu.uz"""
+    urls = [
+        "https://cbu.uz/ru/arkhiv-kursov-valyut/json/all/",
+        "https://cbu.uz/ru/arkhiv-kursov-valyut/json/",
+        "https://cbu.uz/uz/arkhiv-kursov-valyut/json/all/"
+    ]
     
-    # 1. Запрос к сайту ЦБ РУз
-    try:
-        url = "https://cbu.uz/ru/arkhiv-kursov-valyut/json/"
-        res = session.get(url, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            rates, rate_date = {}, ""
-            for item in data:
-                code = item.get("Ccy")
-                if code in ["USD", "KRW", "RUB", "CNY"] and code not in rates:
-                    rates[code] = {"rate": item.get("Rate"), "diff": item.get("Diff")}
-                    if not rate_date:
-                        rate_date = item.get("Date", "")
-            
-            # Проверяем, что ЦБ прислал свежую дату (не старее 3 дней с учетом выходных)
-            if rates and rate_date:
-                try:
-                    d_obj = datetime.strptime(rate_date, "%d.%m.%Y")
-                    diff_days = (now.date() - d_obj.date()).days
-                    if diff_days <= 3:
-                        return rates, f"ЦБ РУз (на {rate_date})"
-                except:
-                    return rates, f"ЦБ РУз (на {rate_date})"
-    except Exception as e:
-        print(f"ЦБ напрямую недоступен: {e}")
-
-    # 2. Безотказный мировой шлюз с ежедневным обновлением
-    try:
-        url_global = "https://open.er-api.com/v6/latest/USD"
-        res = session.get(url_global, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            r = data.get("rates", {})
-            uzs = r.get("UZS", 0)
-            if uzs > 0:
-                rates = {
-                    "USD": {"rate": f"{uzs:.2f}", "diff": ""},
-                    "CNY": {"rate": f"{(uzs / r.get('CNY', 1)):.2f}", "diff": ""},
-                    "KRW": {"rate": f"{(uzs / r.get('KRW', 1)):.2f}", "diff": ""},
-                    "RUB": {"rate": f"{(uzs / r.get('RUB', 1)):.2f}", "diff": ""},
-                }
-                date_str = now.strftime("%d.%m.%Y")
-                return rates, f"на сегодня, {date_str}"
-    except Exception as e:
-        print(f"Глобальный шлюз валют недоступен: {e}")
+    for url in urls:
+        try:
+            res = session.get(url, timeout=12)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list) and len(data) > 0:
+                    rates = {}
+                    rate_date = ""
+                    for item in data:
+                        code = item.get("Ccy")
+                        if code in ["USD", "EUR", "RUB", "CNY", "KRW"] and code not in rates:
+                            rates[code] = {
+                                "rate": item.get("Rate"),
+                                "diff": item.get("Diff")
+                            }
+                            if not rate_date:
+                                rate_date = item.get("Date", "")
+                    
+                    if rates:
+                        return rates, f"на {rate_date}" if rate_date else "ЦБ РУз"
+        except Exception as e:
+            print(f"Ошибка запроса к {url}: {e}")
+            continue
 
     return None, ""
 
 def get_random_fact():
-    """Случайный факт из онлайн-базы с переводом на русский"""
     fact_en = ""
     try:
         res = session.get("https://uselessfacts.jsph.pl/api/v2/facts/random", timeout=10)
@@ -152,7 +133,7 @@ def get_random_fact():
             res = session.get("https://nekos.life/api/v2/fact", timeout=10)
             fact_en = res.json().get("fact", "")
         except:
-            return "Космонавты в невесомости не могут плакать: слезы не стекают, а собираются в водяные шарики вокруг глаз."
+            return "Космонавты в невесомости не могут плакать привычным образом: слезы собираются в водяные шарики вокруг глаз."
 
     try:
         translate_url = "https://translate.googleapis.com/translate_a/single"
@@ -173,7 +154,7 @@ def send_daily_report():
     
     weather = get_tashkent_weather()
     air = get_air_quality()
-    rates, source_info = get_cbu_rates()
+    rates, date_info = get_cbu_rates()
     random_fact = get_random_fact()
 
     if weather:
@@ -188,9 +169,17 @@ def send_daily_report():
         w_text = "☀️ <b>Погода:</b> Данные временно недоступны\n"
 
     if rates:
-        def fmt(d): return f" ({'+' if not str(d).startswith('-') else ''}{d})" if d and d != "0" else ""
-        usd, cny, krw, rub = rates.get("USD",{}), rates.get("CNY",{}), rates.get("KRW",{}), rates.get("RUB",{})
-        r_text = (f"🏦 <b>Курсы валют ({source_info}):</b>\n"
+        def fmt(d): 
+            if not d or d == "0":
+                return ""
+            return f" ({'+' if not str(d).startswith('-') else ''}{d})"
+
+        usd = rates.get("USD", {})
+        cny = rates.get("CNY", {})
+        krw = rates.get("KRW", {})
+        rub = rates.get("RUB", {})
+
+        r_text = (f"🏦 <b>Курсы валют ЦБ РУз ({date_info}):</b>\n"
                   f"🇺🇸 1 USD = <b>{usd.get('rate','N/A')}</b> сум{fmt(usd.get('diff'))}\n"
                   f"🇨🇳 1 CNY = <b>{cny.get('rate','N/A')}</b> сум{fmt(cny.get('diff'))}\n"
                   f"🇰🇷 1 KRW = <b>{krw.get('rate','N/A')}</b> сум{fmt(krw.get('diff'))}\n"
