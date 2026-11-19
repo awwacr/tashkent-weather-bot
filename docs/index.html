@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Сводка дня — Ташкент</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --wine: #5B0F18;
+      --wine-bright: #8A1927;
+      --wine-deep: #36070D;
+      --cream: #F8F1E7;
+      --cream-muted: rgba(248, 241, 231, 0.64);
+      --cream-soft: rgba(248, 241, 231, 0.36);
+      --black: #0B0B0B;
+
+      --glass-bg: linear-gradient(
+        145deg,
+        rgba(248, 241, 231, 0.10) 0%,
+        rgba(91, 15, 24, 0.16) 52%,
+        rgba(11, 11, 11, 0.42) 100%
+      );
+      --glass-wine: linear-gradient(
+        145deg,
+        rgba(138, 25, 39, 0.42) 0%,
+        rgba(91, 15, 24, 0.36) 55%,
+        rgba(11, 11, 11, 0.48) 100%
+      );
+      --glass-border: rgba(248, 241, 231, 0.16);
+      --glass-highlight: rgba(248, 241, 231, 0.32);
+      --glass-shadow:
+        inset 0 1px 0.5px rgba(248, 241, 231, 0.28),
+        inset 0 -1px 1px rgba(91, 15, 24, 0.45),
+        0 18px 40px rgba(0, 0, 0, 0.55);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      min-height: 100%;
+      background-color: var(--black);
+      color: var(--cream);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+      font-variant-numeric: tabular-nums;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Живой Liquid-фон ===== */
+    .ambient-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 0%, #1C0508 0%, var(--black) 70%);
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(75px);
+      opacity: 0.78;
+      will-change: transform;
+    }
+
+    .orb-1 {
+      width: 340px;
+      height: 340px;
+      top: -90px;
+      left: -80px;
+      background: radial-gradient(circle, var(--wine-bright) 0%, var(--wine) 45%, transparent 75%);
+      animation: float1 16s ease-in-out infinite alternate;
+    }
+
+    .orb-2 {
+      width: 380px;
+      height: 380px;
+      bottom: -80px;
+      right: -110px;
+      background: radial-gradient(circle, var(--wine) 0%, var(--wine-deep) 55%, transparent 78%);
+      animation: float2 20s ease-in-out infinite alternate;
+    }
+
+    .orb-3 {
+      width: 220px;
+      height: 220px;
+      top: 38%;
+      right: -40px;
+      background: radial-gradient(circle, rgba(248, 241, 231, 0.14) 0%, rgba(91, 15, 24, 0.25) 50%, transparent 75%);
+      animation: float3 18s ease-in-out infinite alternate;
+    }
+
+    /* Тончайшая текстура мрамора/бумаги */
+    .noise-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    @keyframes float1 {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(55px, 65px) scale(1.15); }
+    }
+    @keyframes float2 {
+      0% { transform: translate(0, 0) scale(1.05); }
+      100% { transform: translate(-60px, -50px) scale(0.95); }
+    }
+    @keyframes float3 {
+      0% { transform: translate(0, 0) scale(0.95); }
+      100% { transform: translate(-45px, 50px) scale(1.15); }
+    }
+
+    /* ===== Контейнер ===== */
+    .app {
+      position: relative;
+      z-index: 2;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: calc(16px + env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom));
+    }
+
+    /* ===== Шапка ===== */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding: 0 4px;
+    }
+
+    .brand-col {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .city-label {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--cream-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .city-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--cream);
+      box-shadow: 0 0 8px var(--cream);
+    }
+
+    .date-title {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--cream);
+    }
+
+    .time-pill {
+      padding: 7px 13px;
+      border-radius: 999px;
+      background: rgba(248, 241, 231, 0.08);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(248, 241, 231, 0.16);
+      box-shadow: inset 0 1px 0.5px rgba(248, 241, 231, 0.25);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--cream);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* ===== Стеклянные карточки ===== */
+    .glass {
+      position: relative;
+      background: var(--glass-bg);
+      backdrop-filter: blur(28px) saturate(165%);
+      -webkit-backdrop-filter: blur(28px) saturate(165%);
+      border: 1px solid var(--glass-border);
+      border-radius: 28px;
+      box-shadow: var(--glass-shadow);
+      overflow: hidden;
+      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.22s ease;
+    }
+
+    .glass::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(120% 80% at 15% 0%, rgba(248, 241, 231, 0.14) 0%, transparent 55%);
+      pointer-events: none;
+    }
+
+    .glass-wine {
+      background: var(--glass-wine);
+      border-color: rgba(248, 241, 231, 0.22);
+    }
+
+    .glass-clickable {
+      cursor: pointer;
+    }
+
+    .glass-clickable:active {
+      transform: scale(0.975);
+    }
+
+    /* ===== Вкладки (экраны) ===== */
+    .tab-view {
+      display: none;
+      animation: tabFade 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .tab-view.active {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    @keyframes tabFade {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.99);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* ===== ОБЗОР (Bento Grid) ===== */
+    .hero-weather {
+      padding: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .hero-temp {
+      font-size: 56px;
+      font-weight: 300;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--cream);
+    }
+
+    .hero-status {
+      margin-top: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--cream-muted);
+      text-transform: capitalize;
+    }
+
+    .hero-range {
+      margin-top: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(11, 11, 11, 0.34);
+      border: 1px solid rgba(248, 241, 231, 0.12);
+      font-size: 12px;
+      color: var(--cream);
+    }
+
+    .hero-emoji-wrap {
+      width: 78px;
+      height: 78px;
+      border-radius: 24px;
+      background: radial-gradient(circle, rgba(248, 241, 231, 0.16) 0%, rgba(91, 15, 24, 0.25) 100%);
+      border: 1px solid rgba(248, 241, 231, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      flex-shrink: 0;
+      box-shadow: inset 0 1px 1px rgba(248, 241, 231, 0.3);
+    }
+
+    .bento-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .bento-card {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 142px;
+    }
+
+    .card-eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cream-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .bento-value {
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      margin: 10px 0 4px;
+      color: var(--cream);
+    }
+
+    .bento-sub {
+      font-size: 12px;
+      color: var(--cream-muted);
+      line-height: 1.35;
+    }
+
+    .mini-fact-card {
+      padding: 18px 20px;
+    }
+
+    .mini-fact-text {
+      margin-top: 10px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: rgba(248, 241, 231, 0.88);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .link-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--cream-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ===== ПОГОДА ===== */
+    .weather-big-card {
+      padding: 26px 22px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .weather-big-icon {
+      font-size: 56px;
+      margin-bottom: 6px;
+      filter: drop-shadow(0 8px 24px rgba(91, 15, 24, 0.8));
+    }
+
+    .weather-big-temp {
+      font-size: 68px;
+      font-weight: 300;
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+
+    .weather-big-status {
+      margin-top: 8px;
+      font-size: 16px;
+      color: var(--cream-muted);
+      text-transform: capitalize;
+    }
+
+    .minmax-pills {
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .pill-chip {
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: rgba(11, 11, 11, 0.36);
+      border: 1px solid rgba(248, 241, 231, 0.14);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--cream);
+    }
+
+    /* Шкала качества воздуха */
+    .aqi-card {
+      padding: 20px;
+    }
+
+    .aqi-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+
+    .aqi-num {
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+    }
+
+    .aqi-badge {
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: rgba(248, 241, 231, 0.09);
+      border: 1px solid rgba(248, 241, 231, 0.15);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .aqi-bar-wrap {
+      position: relative;
+      margin-top: 16px;
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #34D399 0%, #FBBF24 25%, #FB923C 50%, #EF4444 75%, #A855F7 100%);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    .aqi-marker {
+      position: absolute;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--cream);
+      border: 3px solid var(--black);
+      box-shadow: 0 0 12px var(--cream);
+      transform: translate(-50%, -50%);
+      transition: left 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .aqi-scale-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--cream-soft);
+    }
+
+    /* Капсулы Утро / День / Вечер */
+    .periods-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .period-item {
+      padding: 16px 18px;
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .period-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .period-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 15px;
+      background: rgba(248, 241, 231, 0.08);
+      border: 1px solid rgba(248, 241, 231, 0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .period-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--cream);
+    }
+
+    .period-sub {
+      font-size: 12px;
+      color: var(--cream-muted);
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+
+    .period-temp {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--cream);
+      white-space: nowrap;
+      padding: 6px 11px;
+      border-radius: 999px;
+      background: rgba(91, 15, 24, 0.38);
+      border: 1px solid rgba(248, 241, 231, 0.15);
+    }
+
+    /* ===== ВАЛЮТЫ ===== */
+    .rates-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 4px;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--cream);
+    }
+
+    .section-badge {
+      font-size: 12px;
+      color: var(--cream-muted);
+      padding: 5px 11px;
+      border-radius: 999px;
+      background: rgba(248, 241, 231, 0.07);
+      border: 1px solid rgba(248, 241, 231, 0.12);
+    }
+
+    .rates-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .rate-card {
+      padding: 15px 18px;
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .rate-card.selected {
+      border-color: rgba(248, 241, 231, 0.42);
+      background: var(--glass-wine);
+    }
+
+    .rate-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .flag-circle {
+      width: 42px;
+      height: 42px;
+      border-radius: 15px;
+      background: rgba(248, 241, 231, 0.08);
+      border: 1px solid rgba(248, 241, 231, 0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    .rate-code {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--cream);
+    }
+
+    .rate-name {
+      font-size: 12px;
+      color: var(--cream-muted);
+      margin-top: 2px;
+    }
+
+    .rate-right {
+      text-align: right;
+    }
+
+    .rate-val {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--cream);
+    }
+
+    .rate-unit {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--cream-muted);
+    }
+
+    .diff-pill {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .diff-up {
+      background: rgba(52, 211, 153, 0.16);
+      color: #6EE7B7;
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      box-shadow: 0 0 12px rgba(52, 211, 153, 0.14);
+    }
+
+    .diff-down {
+      background: rgba(244, 63, 94, 0.18);
+      color: #FDA4AF;
+      border: 1px solid rgba(244, 63, 94, 0.35);
+      box-shadow: 0 0 12px rgba(244, 63, 94, 0.15);
+    }
+
+    .diff-flat {
+      background: rgba(248, 241, 231, 0.08);
+      color: var(--cream-muted);
+      border: 1px solid rgba(248, 241, 231, 0.14);
+    }
+
+    /* Мини-конвертер */
+    .converter-card {
+      padding: 20px;
+    }
+
+    .ccy-pills {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .ccy-pill-btn {
+      flex: 1;
+      padding: 9px 0;
+      border-radius: 999px;
+      border: 1px solid rgba(248, 241, 231, 0.14);
+      background: rgba(11, 11, 11, 0.35);
+      color: var(--cream-muted);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .ccy-pill-btn.active {
+      background: var(--cream);
+      color: var(--black);
+      border-color: var(--cream);
+      box-shadow: 0 4px 16px rgba(248, 241, 231, 0.25);
+    }
+
+    .conv-inputs {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+    }
+
+    .conv-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-radius: 18px;
+      background: rgba(11, 11, 11, 0.42);
+      border: 1px solid rgba(248, 241, 231, 0.14);
+    }
+
+    .conv-box:focus-within {
+      border-color: rgba(248, 241, 231, 0.42);
+    }
+
+    .conv-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cream-muted);
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+
+    .conv-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--cream);
+      font-size: 19px;
+      font-weight: 600;
+      text-align: right;
+      font-family: inherit;
+    }
+
+    .conv-input::placeholder {
+      color: var(--cream-soft);
+    }
+
+    /* ===== ФАКТ ДНЯ ===== */
+    .fact-hero-card {
+      padding: 28px 24px;
+      min-height: 260px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .quote-mark {
+      font-size: 54px;
+      line-height: 0.7;
+      font-family: Georgia, serif;
+      color: rgba(248, 241, 231, 0.28);
+      margin-bottom: 12px;
+      user-select: none;
+    }
+
+    .fact-full-text {
+      font-size: 18px;
+      font-weight: 400;
+      line-height: 1.62;
+      color: var(--cream);
+      letter-spacing: -0.01em;
+    }
+
+    .fact-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .glass-btn {
+      flex: 1;
+      padding: 13px 16px;
+      border-radius: 999px;
+      background: rgba(248, 241, 231, 0.11);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(248, 241, 231, 0.22);
+      box-shadow: inset 0 1px 0.5px rgba(248, 241, 231, 0.3);
+      color: var(--cream);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: transform 0.18s ease, background 0.2s ease;
+    }
+
+    .glass-btn:active {
+      transform: scale(0.96);
+    }
+
+    .glass-btn-primary {
+      background: var(--cream);
+      color: var(--black);
+      border-color: var(--cream);
+    }
+
+    /* ===== ПЛАВАЮЩИЙ СТЕКЛЯННЫЙ ДОК СНИЗУ (iOS Liquid Glass) ===== */
+    .dock-wrapper {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: calc(16px + env(safe-area-inset-bottom));
+      z-index: 50;
+      display: flex;
+      justify-content: center;
+      padding: 0 18px;
+      pointer-events: none;
+    }
+
+    .glass-dock {
+      pointer-events: auto;
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      width: 100%;
+      max-width: 390px;
+      padding: 6px;
+      border-radius: 999px;
+      background: linear-gradient(
+        180deg,
+        rgba(248, 241, 231, 0.14) 0%,
+        rgba(38, 8, 12, 0.62) 55%,
+        rgba(11, 11, 11, 0.78) 100%
+      );
+      backdrop-filter: blur(34px) saturate(190%);
+      -webkit-backdrop-filter: blur(34px) saturate(190%);
+      border: 1px solid rgba(248, 241, 231, 0.22);
+      box-shadow:
+        inset 0 1px 1px rgba(248, 241, 231, 0.36),
+        inset 0 -1px 1px rgba(91, 15, 24, 0.5),
+        0 20px 44px rgba(0, 0, 0, 0.72);
+    }
+
+    /* Жидкая перетекающая капсула активной вкладки */
+    .dock-pill {
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      left: 6px;
+      border-radius: 999px;
+      background: linear-gradient(
+        145deg,
+        rgba(248, 241, 231, 0.24) 0%,
+        rgba(138, 25, 39, 0.55) 100%
+      );
+      border: 1px solid rgba(248, 241, 231, 0.32);
+      box-shadow:
+        inset 0 1px 1px rgba(248, 241, 231, 0.45),
+        0 6px 18px rgba(91, 15, 24, 0.55);
+      transition: transform 0.38s cubic-bezier(0.32, 1.15, 0.42, 1), width 0.38s cubic-bezier(0.32, 1.15, 0.42, 1);
+      pointer-events: none;
+    }
+
+    .dock-btn {
+      position: relative;
+      z-index: 2;
+      background: transparent;
+      border: none;
+      color: var(--cream-muted);
+      padding: 9px 4px;
+      border-radius: 999px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.25s ease, transform 0.2s ease;
+    }
+
+    .dock-btn svg {
+      width: 21px;
+      height: 21px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: transform 0.25s ease;
+    }
+
+    .dock-btn.active {
+      color: var(--cream);
+    }
+
+    .dock-btn.active svg {
+      transform: scale(1.08);
+    }
+
+    /* Лоадер */
+    .skeleton {
+      opacity: 0.65;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.8; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient-bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="noise-overlay"></div>
+
+  <main class="app">
+    <!-- Шапка -->
+    <header class="top-bar">
+      <div class="brand-col">
+        <div class="city-label">
+          <span class="city-dot"></span>
+          <span>Ташкент</span>
+        </div>
+        <h1 class="date-title" id="dateTitle">Загрузка...</h1>
+      </div>
+      <div class="time-pill">
+        <span>✦</span>
+        <span id="updatedTime">--:--</span>
+      </div>
+    </header>
+
+    <!-- ===== ВКЛАДКА 1: ОБЗОР (Bento) ===== -->
+    <section class="tab-view active" id="tab-overview">
+      <div class="glass glass-wine glass-clickable hero-weather" onclick="switchTab('weather')">
+        <div>
+          <div class="card-eyebrow">Погода сейчас</div>
+          <div class="hero-temp" id="ovTemp">--°</div>
+          <div class="hero-status" id="ovStatus">Обновление...</div>
+          <div class="hero-range" id="ovRange">от --° до --°</div>
+        </div>
+        <div class="hero-emoji-wrap" id="ovEmoji">🌤</div>
+      </div>
+
+      <div class="bento-row">
+        <div class="glass glass-clickable bento-card" onclick="switchTab('weather')">
+          <div class="card-eyebrow">
+            <span>Воздух</span>
+            <span>AQI</span>
+          </div>
+          <div>
+            <div class="bento-value" id="ovAqi">--</div>
+            <div class="bento-sub" id="ovAqiStatus">Загрузка...</div>
+          </div>
+        </div>
+
+        <div class="glass glass-clickable bento-card" onclick="switchTab('rates')">
+          <div class="card-eyebrow">
+            <span>🇺🇸 USD</span>
+            <span>ЦБ</span>
+          </div>
+          <div>
+            <div class="bento-value" id="ovUsd">--</div>
+            <div id="ovUsdDiff"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass glass-clickable mini-fact-card" onclick="switchTab('fact')">
+        <div class="card-eyebrow">
+          <span>💡 Факт дня</span>
+          <span>Читать →</span>
+        </div>
+        <p class="mini-fact-text" id="ovFact">Загружаем интересный факт...</p>
+      </div>
+    </section>
+
+    <!-- ===== ВКЛАДКА 2: ПОГОДА ===== -->
+    <section class="tab-view" id="tab-weather">
+      <div class="glass glass-wine weather-big-card">
+        <div class="weather-big-icon" id="wBigEmoji">🌤</div>
+        <div class="weather-big-temp" id="wBigTemp">--°</div>
+        <div class="weather-big-status" id="wBigStatus">--</div>
+        <div class="minmax-pills">
+          <span class="pill-chip" id="wMin">Мин: --°</span>
+          <span class="pill-chip" id="wMax">Макс: --°</span>
+        </div>
+      </div>
+
+      <div class="glass aqi-card">
+        <div class="card-eyebrow">
+          <span>🌫 Качество воздуха</span>
+          <span>US AQI</span>
+        </div>
+        <div class="aqi-header">
+          <div class="aqi-num" id="wAqiNum">--</div>
+          <div class="aqi-badge" id="wAqiBadge">--</div>
+        </div>
+        <div class="aqi-bar-wrap">
+          <div class="aqi-marker" id="aqiMarker" style="left: 10%;"></div>
+        </div>
+        <div class="aqi-scale-labels">
+          <span>0</span>
+          <span>50</span>
+          <span>100</span>
+          <span>150</span>
+          <span>200+</span>
+        </div>
+      </div>
+
+      <div class="periods-list" id="periodsList"></div>
+    </section>
+
+    <!-- ===== ВКЛАДКА 3: ВАЛЮТЫ ===== -->
+    <section class="tab-view" id="tab-rates">
+      <div class="rates-header-row">
+        <div class="section-title">Курсы ЦБ РУз</div>
+        <div class="section-badge" id="ratesDate">ЦБ РУз</div>
+      </div>
+
+      <div class="rates-list" id="ratesList"></div>
+
+      <div class="glass glass-wine converter-card">
+        <div class="card-eyebrow">
+          <span>⇄ Быстрый конвертер</span>
+          <span>в сумы</span>
+        </div>
+        <div class="ccy-pills" id="ccyPills">
+          <button class="ccy-pill-btn active" data-ccy="USD">USD</button>
+          <button class="ccy-pill-btn" data-ccy="CNY">CNY</button>
+          <button class="ccy-pill-btn" data-ccy="KRW">KRW</button>
+          <button class="ccy-pill-btn" data-ccy="RUB">RUB</button>
+        </div>
+        <div class="conv-inputs">
+          <div class="conv-box">
+            <span class="conv-label" id="convForeignLabel">🇺🇸 USD</span>
+            <input type="number" inputmode="decimal" id="convForeign" class="conv-input" value="100" placeholder="0" />
+          </div>
+          <div class="conv-box">
+            <span class="conv-label">🇺🇿 UZS</span>
+            <input type="number" inputmode="decimal" id="convUzs" class="conv-input" placeholder="0" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== ВКЛАДКА 4: ФАКТ ДНЯ ===== -->
+    <section class="tab-view" id="tab-fact">
+      <div class="glass glass-wine fact-hero-card">
+        <div>
+          <div class="card-eyebrow" style="margin-bottom: 18px;">
+            <span>💡 Интересный факт</span>
+            <span>На сегодня</span>
+          </div>
+          <div class="quote-mark">“</div>
+          <p class="fact-full-text" id="factFullText">Загрузка факта...</p>
+        </div>
+
+        <div class="fact-actions">
+          <button class="glass-btn glass-btn-primary" id="copyFactBtn" onclick="copyFact()">
+            <span>Скопировать</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== ПЛАВАЮЩИЙ СТЕКЛЯННЫЙ ДОК ===== -->
+  <nav class="dock-wrapper">
+    <div class="glass-dock" id="glassDock">
+      <div class="dock-pill" id="dockPill"></div>
+
+      <button class="dock-btn active" data-tab="overview" onclick="switchTab('overview')">
+        <svg viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7" rx="2"></rect>
+          <rect x="14" y="3" width="7" height="7" rx="2"></rect>
+          <rect x="3" y="14" width="7" height="7" rx="2"></rect>
+          <rect x="14" y="14" width="7" height="7" rx="2"></rect>
+        </svg>
+        <span>Обзор</span>
+      </button>
+
+      <button class="dock-btn" data-tab="weather" onclick="switchTab('weather')">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 3v2m0 14v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M3 12h2m14 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"></path>
+          <circle cx="12" cy="12" r="4"></circle>
+        </svg>
+        <span>Погода</span>
+      </button>
+
+      <button class="dock-btn" data-tab="rates" onclick="switchTab('rates')">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M14.5 9.5c0-1.38-1.12-2-2.5-2s-2.5.62-2.5 2c0 2.5 5 1.5 5 4.5 0 1.38-1.12 2.25-2.5 2.25s-2.5-.87-2.5-2.25"></path>
+          <path d="M12 6v1.5m0 9V18"></path>
+        </svg>
+        <span>Валюты</span>
+      </button>
+
+      <button class="dock-btn" data-tab="fact" onclick="switchTab('fact')">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"></path>
+          <path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16z"></path>
+        </svg>
+        <span>Факт</span>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    // Инициализация Telegram Web App
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      try {
+        tg.setHeaderColor('#0B0B0B');
+        tg.setBackgroundColor('#0B0B0B');
+      } catch (e) {}
+    }
+
+    function haptic(type = 'selection') {
+      if (!tg || !tg.HapticFeedback) return;
+      try {
+        if (type === 'selection') tg.HapticFeedback.selectionChanged();
+        else tg.HapticFeedback.impactOccurred('light');
+      } catch (e) {}
+    }
+
+    // Конфиг валют
+    const CCY_META = {
+      USD: { flag: '🇺🇸', name: 'Доллар США' },
+      CNY: { flag: '🇨🇳', name: 'Китайский юань' },
+      KRW: { flag: '🇰🇷', name: 'Корейская вона' },
+      RUB: { flag: '🇷🇺', name: 'Российский рубль' }
+    };
+
+    let appData = null;
+    let selectedCcy = 'USD';
+
+    // ===== Переключение вкладок и плавающая капсула =====
+    function updateDockPill() {
+      const dock = document.getElementById('glassDock');
+      const pill = document.getElementById('dockPill');
+      const activeBtn = dock.querySelector('.dock-btn.active');
+      if (!activeBtn) return;
+
+      const dockRect = dock.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      const offsetX = btnRect.left - dockRect.left - 6;
+
+      pill.style.width = `${btnRect.width}px`;
+      pill.style.transform = `translateX(${offsetX}px)`;
+    }
+
+    function switchTab(tabId) {
+      const current = document.querySelector('.dock-btn.active');
+      if (current && current.dataset.tab === tabId) return;
+
+      haptic('selection');
+      document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.dock-btn').forEach(el => el.classList.remove('active'));
+
+      const targetView = document.getElementById(`tab-${tabId}`);
+      const targetBtn = document.querySelector(`.dock-btn[data-tab="${tabId}"]`);
+      if (targetView) targetView.classList.add('active');
+      if (targetBtn) targetBtn.classList.add('active');
+
+      updateDockPill();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    window.addEventListener('resize', updateDockPill);
+
+    // ===== Хелперы форматирования =====
+    function extractEmoji(text = '') {
+      const m = text.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+/u);
+      return m ? m[0] : '🌤';
+    }
+
+    function stripEmoji(text = '') {
+      return text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F]+/gu, '').trim();
+    }
+
+    function formatSignedTemp(t) {
+      if (t === undefined || t === null) return '--°';
+      return `${t > 0 ? '+' : ''}${t}°`;
+    }
+
+    function formatRate(val) {
+      const num = parseFloat(val);
+      if (isNaN(num)) return 'N/A';
+      return num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function buildDiffHtml(diff) {
+      const num = parseFloat(diff);
+      if (!diff || isNaN(num) || num === 0) {
+        return `<span class="diff-pill diff-flat">0.00</span>`;
+      }
+      if (num > 0) {
+        return `<span class="diff-pill diff-up">+${diff.toString().replace('+', '')}</span>`;
+      }
+      return `<span class="diff-pill diff-down">${diff}</span>`;
+    }
+
+    function parsePeriod(str = '') {
+      const idx = str.indexOf(',');
+      if (idx === -1) return { temp: str, desc: '' };
+      return {
+        temp: str.slice(0, idx).trim(),
+        desc: str.slice(idx + 1).trim()
+      };
+    }
+
+    // ===== Конвертер =====
+    function selectConverterCcy(ccy) {
+      selectedCcy = ccy;
+      haptic('light');
+      document.querySelectorAll('.ccy-pill-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.ccy === ccy);
+      });
+      document.querySelectorAll('.rate-card').forEach(card => {
+        card.classList.toggle('selected', card.dataset.ccy === ccy);
+      });
+      const meta = CCY_META[ccy] || { flag: '', name: ccy };
+      document.getElementById('convForeignLabel').textContent = `${meta.flag} ${ccy}`;
+      calcFromForeign();
+    }
+
+    function getRateNum(ccy) {
+      if (!appData || !appData.rates || !appData.rates[ccy]) return 0;
+      return parseFloat(appData.rates[ccy].rate) || 0;
+    }
+
+    function calcFromForeign() {
+      const rate = getRateNum(selectedCcy);
+      const val = parseFloat(document.getElementById('convForeign').value);
+      const out = document.getElementById('convUzs');
+      if (!rate || isNaN(val)) {
+        out.value = '';
+        return;
+      }
+      out.value = Math.round(val * rate);
+    }
+
+    function calcFromUzs() {
+      const rate = getRateNum(selectedCcy);
+      const val = parseFloat(document.getElementById('convUzs').value);
+      const out = document.getElementById('convForeign');
+      if (!rate || isNaN(val)) {
+        out.value = '';
+        return;
+      }
+      out.value = +(val / rate).toFixed(2);
+    }
+
+    document.getElementById('convForeign').addEventListener('input', calcFromForeign);
+    document.getElementById('convUzs').addEventListener('input', calcFromUzs);
+    document.querySelectorAll('.ccy-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => selectConverterCcy(btn.dataset.ccy));
+    });
+
+    // ===== Копирование факта =====
+    function copyFact() {
+      if (!appData || !appData.fact) return;
+      haptic('light');
+      const btn = document.getElementById('copyFactBtn');
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(appData.fact).catch(() => {});
+      }
+      btn.innerHTML = '<span>✓ Скопировано</span>';
+      setTimeout(() => {
+        btn.innerHTML = '<span>Скопировать</span>';
+      }, 1800);
+    }
+
+    // ===== Отрисовка данных =====
+    function renderApp(data) {
+      appData = data;
+
+      document.getElementById('dateTitle').textContent = data.day_title || data.day_str || 'Сегодня';
+      document.getElementById('updatedTime').textContent = data.updated_time || '--:--';
+
+      // --- Погода ---
+      const w = data.weather;
+      if (w) {
+        const emoji = extractEmoji(w.status);
+        const cleanStatus = stripEmoji(w.status);
+
+        document.getElementById('ovTemp').textContent = formatSignedTemp(w.current);
+        document.getElementById('ovStatus').textContent = cleanStatus;
+        document.getElementById('ovRange').textContent = `от ${formatSignedTemp(w.min)} до ${formatSignedTemp(w.max)}`;
+        document.getElementById('ovEmoji').textContent = emoji;
+
+        document.getElementById('wBigEmoji').textContent = emoji;
+        document.getElementById('wBigTemp').textContent = formatSignedTemp(w.current);
+        document.getElementById('wBigStatus').textContent = cleanStatus;
+        document.getElementById('wMin').textContent = `Мин: ${formatSignedTemp(w.min)}`;
+        document.getElementById('wMax').textContent = `Макс: ${formatSignedTemp(w.max)}`;
+
+        const periods = [
+          { icon: '🌅', title: 'Утро', sub: 'до 11:00', raw: w.morning },
+          { icon: '☀️', title: 'День', sub: '12:00–17:00', raw: w.day },
+          { icon: '🌙', title: 'Вечер', sub: 'после 18:00', raw: w.evening }
+        ];
+
+        document.getElementById('periodsList').innerHTML = periods.map(p => {
+          const parsed = parsePeriod(p.raw);
+          return `
+            <div class="glass period-item">
+              <div class="period-left">
+                <div class="period-icon">${p.icon}</div>
+                <div>
+                  <div class="period-title">${p.title} <span style="font-weight:400; color:var(--cream-soft); font-size:12px;">${p.sub}</span></div>
+                  <div class="period-sub">${parsed.desc}</div>
+                </div>
+              </div>
+              <div class="period-temp">${parsed.temp}</div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        document.getElementById('ovStatus').textContent = 'Данные недоступны';
+      }
+
+      // --- Воздух (AQI) ---
+      const airStr = data.air || 'Данные недоступны';
+      const aqiMatch = airStr.match(/(\d+)/);
+      const aqiVal = aqiMatch ? parseInt(aqiMatch[1], 10) : null;
+      const statusMatch = airStr.match(/\((.+)\)/);
+      const aqiStatusText = statusMatch ? statusMatch[1] : airStr;
+
+      document.getElementById('ovAqi').textContent = aqiVal !== null ? aqiVal : '—';
+      document.getElementById('ovAqiStatus').textContent = aqiStatusText;
+      document.getElementById('wAqiNum').textContent = aqiVal !== null ? `${aqiVal} AQI` : '—';
+      document.getElementById('wAqiBadge').textContent = aqiStatusText;
+
+      if (aqiVal !== null) {
+        const percent = Math.min(97, Math.max(3, (aqiVal / 220) * 100));
+        document.getElementById('aqiMarker').style.left = `${percent}%`;
+      }
+
+      // --- Валюты ---
+      const rates = data.rates;
+      document.getElementById('ratesDate').textContent = data.rates_date || 'ЦБ РУз';
+
+      if (rates) {
+        if (rates.USD) {
+          document.getElementById('ovUsd').textContent = Math.round(parseFloat(rates.USD.rate)).toLocaleString('ru-RU');
+          document.getElementById('ovUsdDiff').innerHTML = buildDiffHtml(rates.USD.diff);
+        }
+
+        const codes = ['USD', 'CNY', 'KRW', 'RUB'];
+        document.getElementById('ratesList').innerHTML = codes.map(code => {
+          const item = rates[code] || {};
+          const meta = CCY_META[code];
+          return `
+            <div class="glass glass-clickable rate-card ${code === selectedCcy ? 'selected' : ''}" data-ccy="${code}" onclick="selectConverterCcy('${code}')">
+              <div class="rate-left">
+                <div class="flag-circle">${meta.flag}</div>
+                <div>
+                  <div class="rate-code">1 ${code}</div>
+                  <div class="rate-name">${meta.name}</div>
+                </div>
+              </div>
+              <div class="rate-right">
+                <div class="rate-val">${formatRate(item.rate)} <span class="rate-unit">сум</span></div>
+                <div>${buildDiffHtml(item.diff)}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        calcFromForeign();
+      } else {
+        document.getElementById('ratesList').innerHTML = `
+          <div class="glass rate-card"><div class="rate-name">Курсы валют временно недоступны</div></div>
+        `;
+      }
+
+      // --- Факт ---
+      const fact = data.fact || 'Факт временно недоступен';
+      document.getElementById('ovFact').textContent = fact;
+      document.getElementById('factFullText').textContent = fact;
+    }
+
+    // Загрузка свежего data.json (с защитой от кэша)
+    async function loadData() {
+      try {
+        const res = await fetch(`./data.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        renderApp(data);
+      } catch (err) {
+        console.error(err);
+        document.getElementById('dateTitle').textContent = 'Нет данных';
+        document.getElementById('ovFact').textContent = 'Запусти GitHub Actions, чтобы сформировать первый файл data.json.';
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      requestAnimationFrame(updateDockPill);
+      loadData();
+    });
+  </script>
+</body>
+</html>
