@@ -1,12 +1,17 @@
 import os
+import sys
+import json
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8810079431:AAHe077hsXsje5o4m-adQnvwFnWs4r03hjA")
-CHAT_ID = os.getenv("CHAT_ID", "1406906655")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+CHAT_ID = os.getenv("CHAT_ID", "")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "")
+
+DATA_PATH = os.path.join("docs", "data.json")
 
 session = requests.Session()
 headers = {
@@ -57,15 +62,15 @@ def get_tashkent_weather():
     try:
         response = session.get(url, timeout=15)
         data = response.json()
-        
+
         m_t, m_desc = analyze_period(range(6, 12), data["hourly"])
         d_t, d_desc = analyze_period(range(12, 18), data["hourly"])
         e_t, e_desc = analyze_period(range(18, 24), data["hourly"])
 
         return {
-            "current": round(data["current"]["temperature_2m"]), 
+            "current": round(data["current"]["temperature_2m"]),
             "status": describe_wmo(data["current"].get("weather_code", 0)),
-            "max": round(data["daily"]["temperature_2m_max"][0]), 
+            "max": round(data["daily"]["temperature_2m_max"][0]),
             "min": round(data["daily"]["temperature_2m_min"][0]),
             "morning": f"{m_t}, {m_desc}", "day": f"{d_t}, {d_desc}", "evening": f"{e_t}, {e_desc}"
         }
@@ -93,7 +98,7 @@ def get_cbu_rates():
         "https://cbu.uz/ru/arkhiv-kursov-valyut/json/",
         "https://cbu.uz/uz/arkhiv-kursov-valyut/json/all/"
     ]
-    
+
     for url in urls:
         try:
             res = session.get(url, timeout=12)
@@ -111,7 +116,7 @@ def get_cbu_rates():
                             }
                             if not rate_date:
                                 rate_date = item.get("Date", "")
-                    
+
                     if rates:
                         return rates, f"на {rate_date}" if rate_date else "ЦБ РУз"
         except Exception as e:
@@ -144,56 +149,92 @@ def get_random_fact():
     except:
         return fact_en
 
-def send_daily_report():
+
+def fetch_and_save_data():
     tz = ZoneInfo("Asia/Tashkent")
     now = datetime.now(tz)
     months = ["", "января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
     weekdays = ["понедельник", "вторник", "среду", "четверг", "пятницу", "субботу", "воскресенье"]
+    weekdays_nom = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
-    day_str = f"{weekdays[now.weekday()]}, {now.day} {months[now.month]}"
-    
     weather = get_tashkent_weather()
     air = get_air_quality()
     rates, date_info = get_cbu_rates()
     random_fact = get_random_fact()
 
+    payload = {
+        "day_str": f"{weekdays[now.weekday()]}, {now.day} {months[now.month]}",
+        "day_title": f"{weekdays_nom[now.weekday()]}, {now.day} {months[now.month]}",
+        "updated_time": now.strftime("%H:%M"),
+        "weather": weather,
+        "air": air,
+        "rates": rates,
+        "rates_date": date_info,
+        "fact": random_fact,
+    }
+
+    os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
+    with open(DATA_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    print("Данные сохранены в", DATA_PATH)
+    return payload
+
+
+def send_daily_report(payload=None):
+    if payload is None:
+        if os.path.exists(DATA_PATH):
+            with open(DATA_PATH, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        else:
+            payload = fetch_and_save_data()
+
+    weather = payload.get("weather")
+    rates = payload.get("rates")
+    day_str = payload.get("day_str", "сегодня")
+
+    # Короткое красивое превью в чат + кнопка для открытия Liquid Glass Web App
+    preview_lines = [f"✨ <b>Доброе утро! Сводка на {day_str}</b>\n"]
     if weather:
-        w_text = (f"☀️ <b>Погода в Ташкенте:</b>\n• Сейчас ({now.strftime('%H:%M')}): <b>{weather['current']}°C</b> ({weather['status']})\n"
-                  f"• За сутки: от <b>{weather['min']}°C</b> до <b>+{weather['max']}°C</b>\n\n"
-                  f"🌫 <b>Качество воздуха:</b> {air}\n\n"
-                  f"🕒 <b>Прогноз по часам на сегодня:</b>\n"
-                  f"🌅 <b>Утро (до 11:00):</b> {weather['morning']}\n"
-                  f"☀️ <b>День (12:00–17:00):</b> {weather['day']}\n"
-                  f"🌙 <b>Вечер (после 18:00):</b> {weather['evening']}\n")
-    else:
-        w_text = "☀️ <b>Погода:</b> Данные временно недоступны\n"
+        preview_lines.append(f"🌡 Ташкент: <b>{weather['current']}°C</b> ({weather['status']})")
+    if rates and rates.get("USD"):
+        usd = rates["USD"]
+        preview_lines.append(f"🇺🇸 USD: <b>{usd.get('rate', 'N/A')}</b> сум")
+    preview_lines.append("\nНажми кнопку ниже, чтобы открыть подробную сводку 👇")
 
-    if rates:
-        def fmt(d): 
-            if not d or d == "0":
-                return ""
-            return f" ({'+' if not str(d).startswith('-') else ''}{d})"
+    body = {
+        "chat_id": CHAT_ID,
+        "text": "\n".join(preview_lines),
+        "parse_mode": "HTML",
+    }
 
-        usd = rates.get("USD", {})
-        cny = rates.get("CNY", {})
-        krw = rates.get("KRW", {})
-        rub = rates.get("RUB", {})
-
-        r_text = (f"🏦 <b>Курсы валют ЦБ РУз ({date_info}):</b>\n"
-                  f"🇺🇸 1 USD = <b>{usd.get('rate','N/A')}</b> сум{fmt(usd.get('diff'))}\n"
-                  f"🇨🇳 1 CNY = <b>{cny.get('rate','N/A')}</b> сум{fmt(cny.get('diff'))}\n"
-                  f"🇰🇷 1 KRW = <b>{krw.get('rate','N/A')}</b> сум{fmt(krw.get('diff'))}\n"
-                  f"🇷🇺 1 RUB = <b>{rub.get('rate','N/A')}</b> сум{fmt(rub.get('diff'))}\n")
-    else:
-        r_text = "🏦 <b>Курсы валют:</b> Данные временно недоступны\n"
-
-    full_message = f"📊 <b>Сводка на {day_str}</b>\n\n{w_text}\n{r_text}\n💡 <b>Интересный факт:</b>\n<i>{random_fact}</i>"
+    if WEBAPP_URL:
+        body["reply_markup"] = {
+            "inline_keyboard": [[
+                {
+                    "text": "✦ Открыть сводку",
+                    "web_app": {"url": WEBAPP_URL}
+                }
+            ]]
+        }
 
     try:
-        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", 
-                      data={"chat_id": CHAT_ID, "text": full_message, "parse_mode": "HTML"}, timeout=15)
+        res = requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json=body,
+            timeout=15
+        )
+        print("Telegram status:", res.status_code, res.text)
     except Exception as e:
         print(f"Telegram API Error: {e}")
 
+
 if __name__ == "__main__":
-    send_daily_report()
+    mode = sys.argv[1] if len(sys.argv) > 1 else "--all"
+    if mode == "--fetch":
+        fetch_and_save_data()
+    elif mode == "--send":
+        send_daily_report()
+    else:
+        data = fetch_and_save_data()
+        send_daily_report(data)
