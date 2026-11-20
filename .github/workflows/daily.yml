@@ -2,7 +2,7 @@ name: Daily Tashkent Report
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # 07:00 по Ташкенту (можешь оставить своё время, если было другое)
+    - cron: '43 1 * * *'  # 06:43 по Ташкенту (без пиковой очереди :00)
   workflow_dispatch:
 
 permissions:
@@ -35,7 +35,7 @@ jobs:
           git diff --staged --quiet || (git commit -m "Update daily report data" && git push)
 
       - name: Wait for GitHub Pages deploy
-        run: sleep 40
+        run: sleep 60
 
       - name: Send Telegram Web App notification
         env:
