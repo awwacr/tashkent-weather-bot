@@ -2,7 +2,7 @@ name: Daily Tashkent Report
 
 on:
   schedule:
-    - cron: '43 1 * * *'  # 06:43 по Ташкенту (без пиковой очереди :00)
+    - cron: '43 19 * * *'  # Сдвиг на 6 часов назад (вчерашний вечер по UTC), чтобы приходило к 07:00-07:30 утра в Ташкенте
   workflow_dispatch:
 
 permissions:
